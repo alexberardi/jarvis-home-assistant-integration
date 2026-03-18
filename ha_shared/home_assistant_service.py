@@ -22,7 +22,14 @@ try:
     from jarvis_log_client import JarvisLogger
 except ImportError:
     import logging
-    JarvisLogger = lambda **kw: logging.getLogger(kw.get("service", __name__))  # noqa: E731
+    class JarvisLogger:  # noqa: E303
+        """Minimal fallback when jarvis_log_client is not available."""
+        def __init__(self, **kw: str) -> None:
+            self._log = logging.getLogger(kw.get("service", __name__))
+        def info(self, msg: str, **kw: object) -> None: self._log.info(msg)
+        def warning(self, msg: str, **kw: object) -> None: self._log.warning(msg)
+        def error(self, msg: str, **kw: object) -> None: self._log.error(msg)
+        def debug(self, msg: str, **kw: object) -> None: self._log.debug(msg)
 
 try:
     from services.secret_service import get_secret_value

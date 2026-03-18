@@ -16,7 +16,13 @@ try:
     from jarvis_log_client import JarvisLogger
 except ImportError:
     import logging
-    JarvisLogger = lambda **kw: logging.getLogger(kw.get("service", __name__))  # noqa: E731
+    class JarvisLogger:  # noqa: E303
+        def __init__(self, **kw: str) -> None:
+            self._log = logging.getLogger(kw.get("service", __name__))
+        def info(self, msg: str, **kw: object) -> None: self._log.info(msg)
+        def warning(self, msg: str, **kw: object) -> None: self._log.warning(msg)
+        def error(self, msg: str, **kw: object) -> None: self._log.error(msg)
+        def debug(self, msg: str, **kw: object) -> None: self._log.debug(msg)
 
 from jarvis_command_sdk import (
     AuthenticationConfig,
@@ -383,7 +389,10 @@ class ControlDeviceCommand(IJarvisCommand):
         Dynamically generates examples from real HA entities when available,
         falling back to hardcoded static examples if HA is unreachable.
         """
-        from utils.ha_training_data import generate_control_examples, get_ha_training_data
+        try:
+            from utils.ha_training_data import generate_control_examples, get_ha_training_data
+        except ImportError:
+            return self._static_adapter_examples()
 
         ha_data = get_ha_training_data()
         if ha_data:
