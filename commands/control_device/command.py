@@ -12,14 +12,22 @@ Direct WiFi devices (source="direct") are controlled via LAN protocol adapters
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from jarvis_log_client import JarvisLogger
+try:
+    from jarvis_log_client import JarvisLogger
+except ImportError:
+    import logging
+    JarvisLogger = lambda **kw: logging.getLogger(kw.get("service", __name__))  # noqa: E731
 
-from core.command_response import CommandResponse
-from core.ijarvis_authentication import AuthenticationConfig
-from core.ijarvis_command import CommandExample, IJarvisCommand
-from core.ijarvis_parameter import JarvisParameter
-from core.ijarvis_secret import IJarvisSecret, JarvisSecret
-from core.request_information import RequestInformation
+from jarvis_command_sdk import (
+    AuthenticationConfig,
+    CommandExample,
+    CommandResponse,
+    IJarvisCommand,
+    JarvisParameter,
+    IJarvisSecret,
+    JarvisSecret,
+    RequestInformation,
+)
 from ha_shared.home_assistant_service import (
     HomeAssistantService,
     get_action_display_name,

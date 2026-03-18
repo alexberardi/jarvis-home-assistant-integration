@@ -8,10 +8,13 @@ AgentSchedulerService can discover and schedule it automatically.
 
 from typing import Any, Dict, List, Optional
 
-from jarvis_log_client import JarvisLogger
+try:
+    from jarvis_log_client import JarvisLogger
+except ImportError:
+    import logging
+    JarvisLogger = lambda **kw: logging.getLogger(kw.get("service", __name__))  # noqa: E731
 
-from core.ijarvis_agent import AgentSchedule, IJarvisAgent
-from core.ijarvis_secret import IJarvisSecret, JarvisSecret
+from jarvis_command_sdk import AgentSchedule, IJarvisAgent, IJarvisSecret, JarvisSecret
 
 logger = JarvisLogger(service="jarvis-node")
 

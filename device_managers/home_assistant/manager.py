@@ -4,11 +4,19 @@ Wraps HomeAssistantService.get_context_data() and maps each HA entity
 to a normalized DeviceManagerDevice.
 """
 
-from jarvis_log_client import JarvisLogger
+try:
+    from jarvis_log_client import JarvisLogger
+except ImportError:
+    import logging
+    JarvisLogger = lambda **kw: logging.getLogger(kw.get("service", __name__))  # noqa: E731
 
-from core.ijarvis_authentication import AuthenticationConfig
-from core.ijarvis_device_manager import DeviceManagerDevice, IJarvisDeviceManager
-from core.ijarvis_secret import IJarvisSecret, JarvisSecret
+from jarvis_command_sdk import (
+    AuthenticationConfig,
+    DeviceManagerDevice,
+    IJarvisDeviceManager,
+    IJarvisSecret,
+    JarvisSecret,
+)
 
 logger = JarvisLogger(service="jarvis-node")
 

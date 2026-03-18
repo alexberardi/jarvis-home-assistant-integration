@@ -17,9 +17,19 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 import httpx
-from jarvis_log_client import JarvisLogger
 
-from services.secret_service import get_secret_value
+try:
+    from jarvis_log_client import JarvisLogger
+except ImportError:
+    import logging
+    JarvisLogger = lambda **kw: logging.getLogger(kw.get("service", __name__))  # noqa: E731
+
+try:
+    from services.secret_service import get_secret_value
+except ImportError:
+    import os
+    def get_secret_value(key: str, scope: str = "") -> str | None:  # noqa: E302
+        return os.environ.get(key)
 
 logger = JarvisLogger(service="jarvis-node")
 
