@@ -29,6 +29,7 @@ from jarvis_command_sdk import (
     CommandExample,
     CommandResponse,
     IJarvisCommand,
+    JarvisPackage,
     JarvisParameter,
     IJarvisSecret,
     JarvisSecret,
@@ -212,6 +213,10 @@ class ControlDeviceCommand(IJarvisCommand):
                 friendly_name="API Key",
             ),
         ]
+
+    @property
+    def required_packages(self) -> List[JarvisPackage]:
+        return [JarvisPackage("websocket-client")]
 
     @property
     def authentication(self) -> AuthenticationConfig:

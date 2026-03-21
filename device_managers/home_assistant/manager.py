@@ -87,7 +87,7 @@ class HomeAssistantDeviceManager(IJarvisDeviceManager):
 
         service = HomeAssistantService()
         try:
-            await service.connect_and_fetch()
+            await service.refresh_if_stale(max_age_seconds=0)
         except Exception as e:
             logger.error("Failed to connect to Home Assistant", error=str(e))
             raise
