@@ -34,7 +34,12 @@ from ha_shared.home_assistant_service import (
     HomeAssistantService,
     get_domain_from_entity_id,
 )
-from ha_shared.entity_resolver import resolve_entity_id, validate_entity
+from ha_shared.entity_resolver import (
+    needs_resolution,
+    resolve_entity_from_voice,
+    resolve_entity_id,
+    validate_entity,
+)
 
 logger = JarvisLogger(service="jarvis-node")
 
@@ -241,6 +246,16 @@ class GetDeviceStatusCommand(IJarvisCommand):
                 )
             )
         return examples
+
+    def post_process_tool_call(self, args: Dict[str, Any], voice_command: str) -> Dict[str, Any]:
+        """Fix up entity_id before execution."""
+        entity_id = args.get("entity_id")
+        if needs_resolution(entity_id):
+            resolved = resolve_entity_from_voice(voice_command)
+            if resolved:
+                logger.info("post_process resolved entity_id", original=entity_id, resolved=resolved["entity_id"])
+                args["entity_id"] = resolved["entity_id"]
+        return args
 
     def run(self, request_info: RequestInformation, **kwargs: Any) -> CommandResponse:
         """Execute the get device status command.

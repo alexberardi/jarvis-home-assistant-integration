@@ -41,7 +41,13 @@ from ha_shared.home_assistant_service import (
     get_actions_for_domain,
     get_domain_from_entity_id,
 )
-from ha_shared.entity_resolver import resolve_entity_id, validate_entity
+from ha_shared.entity_resolver import (
+    needs_resolution,
+    normalize_ha_action,
+    resolve_entity_from_voice,
+    resolve_entity_id,
+    validate_entity,
+)
 
 # Voice keywords → HA domain for floor/area commands
 _VOICE_DOMAIN_HINTS: Dict[str, str] = {
@@ -555,6 +561,31 @@ class ControlDeviceCommand(IJarvisCommand):
                 )
             )
         return examples
+
+    def post_process_tool_call(self, args: Dict[str, Any], voice_command: str) -> Dict[str, Any]:
+        """Fix up entity_id and action before execution.
+
+        Handles garbage entity_ids (placeholders, hallucinations, missing domain)
+        and normalizes short action names (on → turn_on, off → turn_off).
+        """
+        # Normalize short action names
+        action = args.get("action")
+        normalized = normalize_ha_action(action)
+        if normalized != action:
+            args["action"] = normalized
+
+        # If floor/area/room targeting, no entity resolution needed
+        if args.get("floor") or args.get("area") or args.get("room"):
+            return args
+
+        entity_id = args.get("entity_id")
+        if needs_resolution(entity_id):
+            resolved = resolve_entity_from_voice(voice_command, action_hint=args.get("action"))
+            if resolved:
+                logger.info("post_process resolved entity_id", original=entity_id, resolved=resolved["entity_id"])
+                args["entity_id"] = resolved["entity_id"]
+
+        return args
 
     def run(self, request_info: RequestInformation, **kwargs: Any) -> CommandResponse:
         """Execute the control device command.

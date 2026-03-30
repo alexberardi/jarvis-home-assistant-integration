@@ -617,3 +617,133 @@ def clear_entity_registry_cache() -> None:
     """Reset the entity registry cache. Useful for tests."""
     global _entity_registry_cache
     _entity_registry_cache = None
+
+
+# ─── Action normalization & entity_id validation ─────────────────────────────
+# Ported from command-center to keep all HA logic in the HA package.
+
+ACTION_ALIASES: dict[str, str] = {
+    "on": "turn_on",
+    "off": "turn_off",
+    "open": "open_cover",
+    "close": "close_cover",
+    "stop": "stop_cover",
+    "play": "media_play",
+    "pause": "media_pause",
+}
+
+
+def normalize_ha_action(action: str | None) -> str | None:
+    """Normalize short action names to valid HA service actions."""
+    if not action or not isinstance(action, str):
+        return action
+    return ACTION_ALIASES.get(action.strip().lower(), action)
+
+
+def needs_resolution(entity_id: str | None) -> bool:
+    """Return True if entity_id is missing, placeholder, or malformed.
+
+    Detects: None/empty, spaces, braces, missing dot, "get_ha" prefix.
+    """
+    if not entity_id or not isinstance(entity_id, str):
+        return True
+    eid = entity_id.strip()
+    if not eid:
+        return True
+    if " " in eid or "{" in eid or "}" in eid:
+        return True
+    if "." not in eid:
+        return True
+    if eid.lower().startswith("get_ha"):
+        return True
+    return False
+
+
+def resolve_entity_from_voice(
+    voice_command: str,
+    action_hint: str | None = None,
+) -> dict[str, str] | None:
+    """Resolve entity_id from voice command text against the device catalog.
+
+    Uses the agent scheduler's cached HA context (device_controls + light_controls)
+    to find the best entity match based on voice command word overlap.
+
+    Returns:
+        Dict with "entity_id" (and optionally "action"), or None.
+    """
+    try:
+        from services.agent_scheduler_service import get_agent_scheduler_service
+        context = get_agent_scheduler_service().get_aggregated_context()
+        ha_data = context.get("home_assistant", {})
+    except Exception:
+        return None
+
+    if not ha_data:
+        return None
+
+    # Build flat catalog from light_controls + device_controls
+    catalog: list[dict[str, str]] = []
+
+    for name, info in ha_data.get("light_controls", {}).items():
+        catalog.append({
+            "entity_id": info.get("entity_id", ""),
+            "name": name,
+            "area": info.get("area", ""),
+            "domain": "light",
+        })
+
+    room_group_ids = {
+        info.get("entity_id") for info in ha_data.get("light_controls", {}).values()
+    }
+    for domain, devices in ha_data.get("device_controls", {}).items():
+        if not isinstance(devices, list):
+            continue
+        for dev in devices:
+            eid = dev.get("entity_id", "")
+            if domain == "light" and eid in room_group_ids:
+                continue
+            catalog.append({
+                "entity_id": eid,
+                "name": dev.get("name", ""),
+                "area": dev.get("area", ""),
+                "domain": domain,
+            })
+
+    if not catalog:
+        return None
+
+    # Score each device against voice command using word overlap
+    vc_words = {
+        w.lower() for w in voice_command.split()
+        if w.lower() not in STOP_WORDS and len(w) > 1
+    }
+
+    best_score = 0.0
+    best_device: dict[str, str] | None = None
+
+    for dev in catalog:
+        name_words = {w.lower() for w in dev["name"].split() if len(w) > 1}
+        area_words = {w.lower() for w in dev["area"].split() if len(w) > 1}
+        eid_words = {w.lower() for w in dev["entity_id"].replace(".", " ").replace("_", " ").split() if len(w) > 1}
+
+        # Score: area match (strong) + name match + entity_id match
+        area_overlap = len(vc_words & area_words)
+        name_overlap = len(vc_words & name_words)
+        eid_overlap = len(vc_words & eid_words)
+
+        score = (area_overlap * 2.0) + (name_overlap * 1.5) + (eid_overlap * 1.0)
+
+        # Boost if domain matches action hint
+        if action_hint and dev["domain"]:
+            domain_verbs = DOMAIN_ACTION_VERBS.get(dev["domain"], frozenset())
+            if any(v in voice_command.lower() for v in domain_verbs):
+                score += 1.0
+
+        if score > best_score:
+            best_score = score
+            best_device = dev
+
+    if best_device and best_score >= 2.0:
+        return {"entity_id": best_device["entity_id"]}
+
+    return None
