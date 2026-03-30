@@ -200,7 +200,18 @@ class HomeAssistantService:
         await service.refresh_if_stale()
         context = service.get_context_data()
         result = await service.control_device("light.basement", "turn_on")
+
+    Note: This is a singleton — all callers (agent, commands) share the same
+    instance and cache. This ensures the agent's fetched data is available to commands.
     """
+
+    _instance: Optional["HomeAssistantService"] = None
+
+    def __new__(cls, *args: object, **kwargs: object) -> "HomeAssistantService":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(
         self,
@@ -218,6 +229,9 @@ class HomeAssistantService:
         Raises:
             ValueError: If REST credentials are not available.
         """
+        if self._initialized:
+            return
+        self._initialized = True
         self._base_url = base_url or get_secret_value("HOME_ASSISTANT_REST_URL", "integration")
         self._api_key = api_key or get_secret_value("HOME_ASSISTANT_API_KEY", "integration")
         self._ws_url = ws_url or get_secret_value("HOME_ASSISTANT_WS_URL", "integration")
