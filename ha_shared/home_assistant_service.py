@@ -231,7 +231,6 @@ class HomeAssistantService:
         """
         if self._initialized:
             return
-        self._initialized = True
         self._base_url = base_url or get_secret_value("HOME_ASSISTANT_REST_URL", "integration")
         self._api_key = api_key or get_secret_value("HOME_ASSISTANT_API_KEY", "integration")
         self._ws_url = ws_url or get_secret_value("HOME_ASSISTANT_WS_URL", "integration")
@@ -255,6 +254,12 @@ class HomeAssistantService:
         self._last_error: Optional[str] = None
         self._message_id: int = 0
         self._message_id_lock: Optional[asyncio.Lock] = None
+
+        # Only mark initialized once everything above succeeded — if credentials
+        # aren't available yet (e.g. agent runs before install-time auth lands),
+        # the ValueError above leaves _initialized False so the next construction
+        # retries instead of returning a half-built singleton.
+        self._initialized = True
 
     # ------------------------------------------------------------------
     # Data fetching (from former HomeAssistantAgent)
