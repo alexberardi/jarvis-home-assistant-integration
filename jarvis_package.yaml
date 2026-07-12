@@ -1,9 +1,9 @@
 name: "home-assistant"
 display_name: "Home Assistant"
 description: "Full Home Assistant integration with device control, status queries, and background state caching"
-version: "1.0.0"
+version: "1.0.1"
 min_jarvis_version: "0.9.0"
-license: "MIT"
+license: "Apache-2.0"
 author:
   github: "alexberardi"
 categories: ["smart-home", "home"]
