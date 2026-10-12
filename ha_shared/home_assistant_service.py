@@ -31,6 +31,11 @@ except ImportError:
         def error(self, msg: str, **kw: object) -> None: self._log.error(msg)
         def debug(self, msg: str, **kw: object) -> None: self._log.debug(msg)
 
+# Largest WebSocket message accepted from Home Assistant. The websockets library defaults to 1 MiB, which the
+# entity, device and area registries of a larger home exceed ("1009 message too big"), so every fetch failed and no
+# entities were loaded. Registry dumps are single messages; 32 MiB leaves ample headroom.
+_WS_MAX_MESSAGE_BYTES = 32 * 1024 * 1024
+
 try:
     from services.secret_service import get_secret_value
 except ImportError:
@@ -298,7 +303,7 @@ class HomeAssistantService:
             return
 
         try:
-            async with websockets.connect(self._ws_url) as websocket:
+            async with websockets.connect(self._ws_url, max_size=_WS_MAX_MESSAGE_BYTES) as websocket:
                 await self._authenticate(websocket, self._api_key)
 
                 # Fetch registries sequentially (WS can't handle concurrent recv)
