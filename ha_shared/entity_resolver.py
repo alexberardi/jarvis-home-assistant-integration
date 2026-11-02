@@ -28,12 +28,7 @@ except ImportError:
         def error(self, msg: str, **kw: object) -> None: self._log.error(msg)
         def debug(self, msg: str, **kw: object) -> None: self._log.debug(msg)
 
-try:
-    from services.secret_service import get_secret_value
-except ImportError:
-    import os
-    def get_secret_value(key: str, scope: str = "") -> str | None:  # noqa: E302
-        return os.environ.get(key)
+from ha_shared.secrets import get_secret_value
 
 logger = JarvisLogger(service="jarvis-node")
 

@@ -36,12 +36,7 @@ except ImportError:
 # entities were loaded. Registry dumps are single messages; 32 MiB leaves ample headroom.
 _WS_MAX_MESSAGE_BYTES = 32 * 1024 * 1024
 
-try:
-    from services.secret_service import get_secret_value
-except ImportError:
-    import os
-    def get_secret_value(key: str, scope: str = "") -> str | None:  # noqa: E302
-        return os.environ.get(key)
+from ha_shared.secrets import get_secret_value
 
 logger = JarvisLogger(service="jarvis-node")
 
@@ -750,6 +745,19 @@ class HomeAssistantService:
             ServiceCallResult with success/failure info
         """
         return await self.call_service("light", action.value, entity_id)
+
+    async def temperature_unit(self) -> Optional[str]:
+        """"F" or "C" from HA's unit system (climate entities don't carry one); None if unreadable."""
+        if getattr(self, "_temperature_unit", None) is None:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"{self._base_url}/api/config", headers=self._get_headers(), timeout=10.0)
+                unit = response.json().get("unit_system", {}).get("temperature", "") if response.status_code == 200 else ""
+            except Exception as e:
+                logger.warning("HA config query failed", error=str(e))
+                return None
+            self._temperature_unit = "F" if "F" in unit else "C" if "C" in unit else None
+        return self._temperature_unit
 
     async def get_state(self, entity_id: str) -> EntityStateResult:
         """Get current state of an entity.

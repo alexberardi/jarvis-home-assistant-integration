@@ -18,6 +18,7 @@ except ImportError:
 
 from jarvis_command_sdk import (
     AuthenticationConfig,
+    DeviceControlResult,
     DeviceManagerDevice,
     IJarvisDeviceManager,
     IJarvisSecret,
@@ -83,6 +84,7 @@ class HomeAssistantDeviceManager(IJarvisDeviceManager):
 
     async def collect_devices(self) -> list[DeviceManagerDevice]:
         """Fetch devices from HA via WebSocket and map to DeviceManagerDevice."""
+        from ha_shared.catalogue import catalogue_domain
         from ha_shared.home_assistant_service import HomeAssistantService
 
         service = HomeAssistantService()
@@ -106,8 +108,7 @@ class HomeAssistantDeviceManager(IJarvisDeviceManager):
                 if not entity_id:
                     continue
 
-                # Extract domain from entity_id (e.g., "light.living_room" → "light")
-                domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
+                domain = catalogue_domain(entity_id)
 
                 devices.append(DeviceManagerDevice(
                     name=entity.get("name") or device_name,
@@ -124,3 +125,39 @@ class HomeAssistantDeviceManager(IJarvisDeviceManager):
 
         logger.info("Home Assistant device list complete", device_count=len(devices))
         return devices
+
+    async def get_state(self, device: DeviceManagerDevice) -> dict | None:
+        """The entity's state in catalogue fields (ha_shared.catalogue.to_state)."""
+        from ha_shared.catalogue import to_state
+        from ha_shared.home_assistant_service import HomeAssistantService
+
+        service = HomeAssistantService()
+        result = await service.get_state(device.entity_id)
+        if not result.success:
+            return {"state": "unknown", "error": result.error}
+        state = to_state(device.entity_id, result.state, result.attributes or {})
+        if device.domain == "climate":
+            unit = await service.temperature_unit()
+            if unit:
+                state["unit"] = unit
+        return state
+
+    async def control(self, device: DeviceManagerDevice, action: str, data: dict | None = None) -> DeviceControlResult:
+        """Run a catalogue action as the matching HA service call."""
+        from ha_shared.catalogue import allowed_actions, catalogue_domain, to_service
+        from ha_shared.home_assistant_service import HomeAssistantService
+        from jarvis_command_sdk import device_type
+
+        domain = catalogue_domain(device.entity_id)
+        if action not in allowed_actions(domain, device_type(domain)):
+            return DeviceControlResult(False, device.entity_id, action, error=f"Unsupported action {action!r} for {domain}")
+        if action in device_type(domain)["features"] and domain in ("media_player", "security_system"):
+            state = await self.get_state(device)
+            if action not in (state or {}).get("available_features", [action]):
+                return DeviceControlResult(False, device.entity_id, action, error=f"{device.name} doesn't support {action}")
+        try:
+            service_domain, service, payload = to_service(device.entity_id, action, data)
+        except (KeyError, TypeError, ValueError) as e:
+            return DeviceControlResult(False, device.entity_id, action, error=f"Invalid data for {action}: {e}")
+        result = await HomeAssistantService().call_service(service_domain, service, device.entity_id, payload)
+        return DeviceControlResult(result.success, device.entity_id, action, error=result.error)
