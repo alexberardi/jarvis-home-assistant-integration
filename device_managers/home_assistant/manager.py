@@ -131,10 +131,16 @@ class HomeAssistantDeviceManager(IJarvisDeviceManager):
         from ha_shared.catalogue import to_state
         from ha_shared.home_assistant_service import HomeAssistantService
 
-        result = await HomeAssistantService().get_state(device.entity_id)
+        service = HomeAssistantService()
+        result = await service.get_state(device.entity_id)
         if not result.success:
             return {"state": "unknown", "error": result.error}
-        return to_state(device.entity_id, result.state, result.attributes or {})
+        state = to_state(device.entity_id, result.state, result.attributes or {})
+        if device.domain == "climate":
+            unit = await service.temperature_unit()
+            if unit:
+                state["unit"] = unit
+        return state
 
     async def control(self, device: DeviceManagerDevice, action: str, data: dict | None = None) -> DeviceControlResult:
         """Run a catalogue action as the matching HA service call."""

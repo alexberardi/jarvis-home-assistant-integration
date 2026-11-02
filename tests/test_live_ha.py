@@ -70,6 +70,7 @@ def test_unsupported_and_unknown_actions_fail_cleanly():
 def test_thermostat_mode():
     mgr, dev = _manager(), _demo("climate.hvac")
     before = asyncio.run(mgr.get_state(dev))["mode"]
+    assert asyncio.run(mgr.get_state(dev))["unit"] in ("C", "F")
     assert asyncio.run(mgr.control(dev, "set_mode", {"mode": "heat"})).success
     assert asyncio.run(mgr.get_state(dev))["mode"] == "heat"
     asyncio.run(mgr.control(dev, "set_mode", {"mode": before}))
